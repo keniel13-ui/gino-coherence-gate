@@ -1,0 +1,133 @@
+{
+  "policy_id": "gino-scorer-v0-2026-06-18-frozen",
+  "frozen_at": "2026-06-18",
+  "signed_off_by": "Keniel",
+  "entry_latency_sec": 30,
+  "account_equity_usd": 5000,
+  "caps": {
+    "max_position_per_symbol_usd": 750,
+    "max_concurrent_positions": 4,
+    "rolling_exposure_cap_usd": 1500,
+    "daily_loss_limit_usd": 200
+  },
+  "rule_variants": [
+    {
+      "name": "tp_only_no_stop",
+      "take_profit_pct": 27.5,
+      "stop_pct": null,
+      "time_stop_sec": null,
+      "allow_no_stop_sizing_cap": true
+    },
+    {
+      "name": "tp_stop15",
+      "take_profit_pct": 27.5,
+      "stop_pct": -15,
+      "time_stop_sec": 172800
+    },
+    {
+      "name": "tp_atr_stop_2x",
+      "take_profit_pct": 27.5,
+      "stop_kind": "atr",
+      "atr_multiple": 2.0,
+      "atr_period": 14,
+      "time_stop_sec": 172800
+    },
+    {
+      "name": "tp_atr_stop_3x",
+      "take_profit_pct": 27.5,
+      "stop_kind": "atr",
+      "atr_multiple": 3.0,
+      "atr_period": 14,
+      "time_stop_sec": 172800
+    },
+    {
+      "name": "atr_trailing_3x10",
+      "take_profit_pct": null,
+      "stop_kind": "atr_trailing",
+      "atr_multiple": 3.0,
+      "atr_period": 10,
+      "time_stop_sec": 172800
+    },
+    {
+      "name": "time_stop_24h",
+      "take_profit_pct": 27.5,
+      "stop_pct": null,
+      "time_stop_sec": 86400,
+      "allow_no_stop_sizing_cap": true
+    },
+    {
+      "name": "time_stop_48h",
+      "take_profit_pct": 27.5,
+      "stop_pct": null,
+      "time_stop_sec": 172800,
+      "allow_no_stop_sizing_cap": true
+    },
+    {
+      "name": "triple_barrier",
+      "take_profit_pct": 27.5,
+      "stop_pct": -15,
+      "time_stop_sec": 172800
+    }
+  ],
+  "sizing_variants": [
+    {
+      "name": "risk_1pct",
+      "kind": "risk_pct_of_equity",
+      "risk_pct": 1.0,
+      "fallback_notional_usd": 750,
+      "max_notional_usd": 750
+    },
+    {
+      "name": "risk_2pct",
+      "kind": "risk_pct_of_equity",
+      "risk_pct": 2.0,
+      "fallback_notional_usd": 750,
+      "max_notional_usd": 750
+    }
+  ],
+  "fees_model": {
+    "per_trade_usd": 0.0,
+    "slippage_bps": 5
+  },
+  "late_call_detector": {
+    "max_move_pct_before_entry": 3.0
+  },
+  "live_haircut": {
+    "stress_pct": 50.0,
+    "min_expectancy_usd_after_haircut": 1.0
+  },
+  "require_baseline_for_advance": true,
+  "exclusion_rules": [
+    "no price data",
+    "illiquid/penny",
+    "duplicate signal",
+    "ambiguous symbol/side"
+  ],
+  "min_settled_n": 50,
+  "decision_timebox_days": 21,
+  "one_correction_only": true,
+  "baselines": [
+    "spy_buy_hold_same_window",
+    "random_timed_entry"
+  ],
+  "sources": {
+    "own:ts_momentum": {
+      "enabled": true,
+      "universe": "liquid_large_caps_v0",
+      "lookback_months": 12,
+      "require_price_above_sma_200": true,
+      "require_sma_50_above_sma_200": true
+    },
+    "own:rsi2": {
+      "enabled": true,
+      "universe": "liquid_large_caps_v0",
+      "rsi_period": 2,
+      "entry_threshold": 10,
+      "require_price_above_sma_200": true
+    },
+    "discord:gino": {
+      "enabled": false,
+      "requires_backlog_or_live_capture": true
+    }
+  }
+}

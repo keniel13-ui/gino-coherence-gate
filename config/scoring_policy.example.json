@@ -1,0 +1,24 @@
+{
+  "policy_id": "gino-scorer-v0-2026-06-18",
+  "entry_latency_sec": 30,
+  "account_equity_usd": 5000,
+  "rule_variants": [
+    { "name": "tp27_5_no_stop", "take_profit_pct": 27.5, "stop_pct": null, "time_stop_sec": 172800 },
+    { "name": "tp27_5_stop15", "take_profit_pct": 27.5, "stop_pct": -15, "time_stop_sec": 172800 },
+    { "name": "tp27_5_timestop", "take_profit_pct": 27.5, "stop_pct": null, "time_stop_sec": 86400 }
+  ],
+  "sizing_variants": [
+    { "name": "fixed_250", "kind": "fixed_notional", "notional_usd": 250 },
+    { "name": "risk_1pct", "kind": "risk_pct_of_equity", "risk_pct": 1.0, "max_notional_usd": 750 },
+    { "name": "risk_2pct", "kind": "risk_pct_of_equity", "risk_pct": 2.0, "max_notional_usd": 1000 }
+  ],
+  "fees_model": { "per_trade_usd": 0.0, "slippage_bps": 5 },
+  "late_call_detector": { "max_move_pct_before_entry": 3.0 },
+  "live_haircut": { "stress_pct": 50.0, "min_expectancy_usd_after_haircut": 1.0 },
+  "require_baseline_for_advance": true,
+  "exclusion_rules": ["no price data", "illiquid/penny", "duplicate signal", "ambiguous symbol/side"],
+  "min_settled_n": 50,
+  "decision_timebox_days": 21,
+  "one_correction_only": true,
+  "baselines": ["spy_buy_hold_same_window", "random_timed_entry"]
+}

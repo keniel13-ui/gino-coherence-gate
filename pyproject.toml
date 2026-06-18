@@ -1,0 +1,9 @@
+[project]
+name = "gino-coherence-gate"
+version = "0.0.1"
+description = "Read-only deterministic coherence gate skeleton for the Gino execution proof."
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
