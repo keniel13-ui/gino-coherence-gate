@@ -16,13 +16,14 @@ This project implements the local, deterministic gate that sits between an agent
 - Aggregate scorer metrics into action verdicts: `continue_collecting`, `advance`, `kill_source`, `rerun_one_correction`, or `unmeasurable`.
 - Enforce the results gate: min settled N or decision timebox, one correction only, live-performance haircut, baseline-required advancement, late-call detector, and consecutive-loss survival metric.
 - Assess whether a captured MCP manifest can support a read-only Gino setup visit.
+- Normalize a user-authenticated MCP `tools/list` capture into the gate manifest shape.
 - Keep the Gino visit checklist explicit: read-only first, customer feeds optional, no credentials handled by Keniel.
 
 ## Not Yet Implemented
 
 - Robinhood OAuth.
 - Live MCP upstream calls.
-- Authenticated manifest dump from `https://agent.robinhood.com/mcp/trading`.
+- Automated authenticated manifest dump from `https://agent.robinhood.com/mcp/trading`. The manual capture/normalize path exists; authentication still happens in an official MCP client with the account owner present.
 - `review_equity_order` shadow execution.
 - Paper fills or live order forwarding.
 - Historical market-data adapter for backlog scoring.
@@ -73,12 +74,20 @@ python3 scripts/gino_visit_readiness.py
 When a real authenticated manifest exists:
 
 ```bash
+python3 scripts/normalize_manifest_capture.py manifests/robinhood_manifest.raw.json
+```
+
+```bash
 python3 scripts/gino_visit_readiness.py --manifest-json path/to/manifest.json
 ```
 
 Visit checklist:
 
 `docs/gino_intake_checklist_2026-06-18.md`
+
+Manifest capture checklist:
+
+`docs/robinhood_manifest_capture.md`
 
 ## Unit Tests
 
