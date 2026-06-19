@@ -15,6 +15,8 @@ This project implements the local, deterministic gate that sits between an agent
 - Simulate captured signals against OHLC price paths with latency, slippage, fees, take-profit, stop, time-stop, MFE/MAE, and position sizing.
 - Aggregate scorer metrics into action verdicts: `continue_collecting`, `advance`, `kill_source`, `rerun_one_correction`, or `unmeasurable`.
 - Enforce the results gate: min settled N or decision timebox, one correction only, live-performance haircut, baseline-required advancement, late-call detector, and consecutive-loss survival metric.
+- Assess whether a captured MCP manifest can support a read-only Gino setup visit.
+- Keep the Gino visit checklist explicit: read-only first, customer feeds optional, no credentials handled by Keniel.
 
 ## Not Yet Implemented
 
@@ -40,9 +42,19 @@ Anchor file:
 
 `config/scoring_policy.frozen.2026-06-18.anchor.json`
 
-The git commit anchor is still pending because this folder is not currently a git repository.
+Public git receipt:
 
-Those remain gated on authenticated manifest verification.
+`https://github.com/keniel13-ui/gino-coherence-gate`
+
+Freeze commit:
+
+`8cf62509509dcdd96b7036d2b57e04a6b8080a2b`
+
+Latest pushed commit at the time this README was updated:
+
+`76495de872c90dcba0939b828558e67b47795615`
+
+Authenticated live manifest verification is still pending.
 
 ## Smoke Test
 
@@ -53,6 +65,20 @@ python3 scripts/smoke_gino_gate.py
 ```bash
 python3 scripts/smoke_signal_scorer.py
 ```
+
+```bash
+python3 scripts/gino_visit_readiness.py
+```
+
+When a real authenticated manifest exists:
+
+```bash
+python3 scripts/gino_visit_readiness.py --manifest-json path/to/manifest.json
+```
+
+Visit checklist:
+
+`docs/gino_intake_checklist_2026-06-18.md`
 
 ## Unit Tests
 

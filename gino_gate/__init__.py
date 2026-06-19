@@ -11,5 +11,6 @@ __all__ = [
     "scoring_metrics",
     "scoring_policy",
     "scoring_records",
+    "setup_status",
     "verdict",
 ]
