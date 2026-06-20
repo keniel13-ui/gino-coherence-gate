@@ -75,7 +75,7 @@ def generate_own_signals_from_market_data(
 
 
 def normalize_historicals_response(symbol: str, payload: Any) -> PriceSeries:
-    rows = _extract_rows(payload, preferred_keys=("historicals", "bars", "results", "data"))
+    rows = _extract_historical_rows(payload)
     bars = [_bar_from_row(row) for row in rows]
     if not bars:
         raise MarketDataAdapterError("historicals response contained no bars")
@@ -126,6 +126,20 @@ def _extract_rows(payload: Any, *, preferred_keys: tuple[str, ...]) -> list[dict
             return [payload]
 
     raise MarketDataAdapterError("response did not contain a supported row list")
+
+
+def _extract_historical_rows(payload: Any) -> list[dict[str, Any]]:
+    rows = _extract_rows(payload, preferred_keys=("historicals", "bars", "results", "data"))
+    flattened: list[dict[str, Any]] = []
+
+    for row in rows:
+        nested_bars = row.get("bars")
+        if isinstance(nested_bars, list):
+            flattened.extend(_ensure_dict_rows(nested_bars))
+        else:
+            flattened.append(row)
+
+    return [row for row in flattened if row.get("interpolated") is not True]
 
 
 def _ensure_dict_rows(rows: list[Any]) -> list[dict[str, Any]]:

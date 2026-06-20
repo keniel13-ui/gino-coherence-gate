@@ -66,6 +66,20 @@ The active quote fields live under `quote`; `close` is a separate object and mus
 - carries the selected trade timestamp as `Quote.ts`,
 - keeps bid/ask as separate fields.
 
+The first captured Robinhood historicals response used this nested shape:
+
+```text
+data.results[].bars[]
+```
+
+The historicals normalizer therefore:
+
+- drills through each `data.results[]` object,
+- flattens every result's `bars[]`,
+- maps `begins_at` / `open_price` / `high_price` / `low_price` / `close_price`,
+- skips bars where `interpolated == true`,
+- preserves split-adjusted regular-session bars as the signal-analysis series.
+
 ## Verification
 
 Fixture smoke:

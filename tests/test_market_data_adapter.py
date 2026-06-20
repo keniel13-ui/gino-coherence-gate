@@ -61,6 +61,55 @@ def test_normalizes_robinhood_like_historicals_response():
     assert series.bars[-1].close == 103.0
 
 
+def test_normalizes_real_robinhood_nested_historicals_response_if_present():
+    path = Path("manifests/aapl_hist.raw.json")
+    if not path.exists():
+        pytest.skip("live AAPL historicals capture is local/gitignored")
+
+    series = normalize_historicals_response("AAPL", json.loads(path.read_text()))
+
+    assert series.symbol == "AAPL"
+    assert len(series.bars) == 251
+    assert series.bars[0].ts.isoformat().replace("+00:00", "Z") == "2025-06-20T00:00:00Z"
+    assert series.bars[0].open == 198.235
+    assert series.bars[-1].ts.isoformat().replace("+00:00", "Z") == "2026-06-18T00:00:00Z"
+    assert series.bars[-1].close == 298.01
+
+
+def test_historicals_skip_interpolated_bars():
+    series = normalize_historicals_response(
+        "ABC",
+        {
+            "data": {
+                "results": [
+                    {
+                        "bars": [
+                            {
+                                "begins_at": "2026-06-18T00:00:00Z",
+                                "open_price": "1",
+                                "high_price": "2",
+                                "low_price": "0.5",
+                                "close_price": "1.5",
+                                "interpolated": True,
+                            },
+                            {
+                                "begins_at": "2026-06-19T00:00:00Z",
+                                "open_price": "2",
+                                "high_price": "3",
+                                "low_price": "1.5",
+                                "close_price": "2.5",
+                            },
+                        ]
+                    }
+                ]
+            }
+        },
+    )
+
+    assert len(series.bars) == 1
+    assert series.bars[0].close == 2.5
+
+
 def test_normalizes_quote_response():
     quote = normalize_quote_response(
         "abc",
