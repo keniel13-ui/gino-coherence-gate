@@ -76,3 +76,14 @@ def test_universe_shadow_score_with_spy_baseline_is_decision_eligible():
     assert result["status"] == "measurement_preview_ready_for_verdict"
     assert result["decision_ready"] is True
     assert result["action_verdict"] in {"advance", "kill_source", "rerun_one_correction", "unmeasurable"}
+    assert result["pooled_report_note"] == "Diagnostic only. Top-level verdict never pools rule/sizing variants."
+    assert result["by_source_variant"]
+    for variant_report in result["by_source_variant"].values():
+        assert variant_report["baseline_unit"] == "average_net_pnl_usd_per_signal_for_this_exact_variant"
+        assert variant_report["baseline_comparison_rule"] == "max(spy_buy_hold_same_window, random_timed_entry)"
+        assert variant_report["baseline_comparison_expectancy_usd"] is not None
+        assert variant_report["baseline_spy_buy_hold_same_window_expectancy_usd"] is not None
+        assert variant_report["beats_baseline"] is not None
+    if result["action_verdict"] == "advance":
+        assert result["qualifying_variants"]
+        assert all(item["beats_baseline"] is True for item in result["qualifying_variants"])

@@ -9,8 +9,8 @@ from .baselines import random_timed_entry_expectancy, spy_buy_hold_same_window
 from .market_data_adapter import normalize_historicals_response
 from .own_signals import generate_rsi2_signals, generate_ts_momentum_signals
 from .price_data import PriceSeries
-from .scorer import Bar, simulate_signal
-from .scoring_metrics import aggregate_records, aggregate_by_source_variant
+from .scorer import Bar, parse_ts, simulate_signal
+from .scoring_metrics import aggregate_by_source_variant, aggregate_records
 from .scoring_policy import ScoringPolicy
 
 
@@ -80,11 +80,13 @@ def shadow_score_universe(
     signals: list[dict[str, Any]] = []
     records: list[dict[str, Any]] = []
     random_samples: list[float] = []
+    bar_dicts_by_symbol: dict[str, list[dict[str, Any]]] = {}
 
     for symbol in sorted(series_by_symbol):
         series = series_by_symbol[symbol]
         symbol_signals = generate_ts_momentum_signals(series) + generate_rsi2_signals(series)
         symbol_bars = [_bar_as_dict(bar) for bar in series.bars]
+        bar_dicts_by_symbol[symbol] = symbol_bars
         signals.extend(symbol_signals)
 
         for signal in symbol_signals:
@@ -108,17 +110,25 @@ def shadow_score_universe(
     random_baseline = sum(random_samples) / len(random_samples) if random_samples else None
     spy_baseline = _spy_baseline(records, spy_series)
     started_at = _earliest_bar_ts(series_by_symbol)
-    report = aggregate_records(
+    pooled_report = aggregate_records(
         records,
         policy,
         as_of=as_of or datetime.now(timezone.utc),
         started_at=started_at,
-        baseline_expectancy_usd=spy_baseline,
+        baseline_expectancy_usd=None,
     )
-    grouped = aggregate_by_source_variant(records, policy) if records else {}
+    grouped = _aggregate_by_source_variant_with_baselines(
+        records,
+        signals,
+        bar_dicts_by_symbol,
+        policy,
+        spy_series=spy_series,
+        as_of=as_of or datetime.now(timezone.utc),
+    ) if records else {}
     measurement_gate = _measurement_gate(signals, policy)
     status = _universe_status(measurement_gate, spy_baseline)
-    action_verdict = _universe_action_verdict(measurement_gate, spy_baseline, report)
+    variant_verdict = _variant_verdict(grouped)
+    action_verdict = _universe_action_verdict(measurement_gate, spy_baseline, variant_verdict)
 
     return {
         "status": status,
@@ -135,10 +145,12 @@ def shadow_score_universe(
             "spy_baseline_status": "present" if spy_baseline is not None else "missing_spy_series",
         },
         "signals": signals,
-        "report": report,
+        "report": pooled_report,
+        "pooled_report_note": "Diagnostic only. Top-level verdict never pools rule/sizing variants.",
         "by_source_variant": grouped,
+        "qualifying_variants": _qualifying_variants(grouped),
         "action_verdict": action_verdict,
-        "decision_ready": measurement_gate["ready"] and spy_baseline is not None,
+        "decision_ready": measurement_gate["ready"] and spy_baseline is not None and bool(grouped),
     }
 
 
@@ -205,6 +217,78 @@ def _spy_baseline(records: list[dict[str, Any]], spy_series: PriceSeries | None)
     return sum(samples) / len(samples)
 
 
+def _aggregate_by_source_variant_with_baselines(
+    records: list[dict[str, Any]],
+    signals: list[dict[str, Any]],
+    bar_dicts_by_symbol: dict[str, list[dict[str, Any]]],
+    policy: ScoringPolicy,
+    *,
+    spy_series: PriceSeries | None,
+    as_of: datetime,
+) -> dict[str, dict[str, Any]]:
+    grouped: dict[tuple[str, str, str], list[dict[str, Any]]] = {}
+    signals_by_id = {str(signal["signal_id"]): signal for signal in signals}
+    for record in records:
+        grouped.setdefault((str(record["source"]), str(record["rule_variant"]), str(record["sizing_variant"])), []).append(record)
+
+    output: dict[str, dict[str, Any]] = {}
+    for key, group in grouped.items():
+        _, rule_name, sizing_name = key
+        spy_baseline = _spy_baseline(group, spy_series)
+        random_baseline = _random_variant_baseline(group, signals_by_id, bar_dicts_by_symbol, policy, rule_name, sizing_name)
+        started_at = min((parse_ts(record["posted_at"]) for record in group), default=None)
+        comparison_baseline = _comparison_baseline(spy_baseline, random_baseline)
+        report = aggregate_records(
+            group,
+            policy,
+            as_of=as_of,
+            started_at=started_at,
+            baseline_expectancy_usd=comparison_baseline,
+        )
+        report["baseline_random_timed_entry_expectancy_usd"] = None if random_baseline is None else round(random_baseline, 6)
+        report["baseline_spy_buy_hold_same_window_expectancy_usd"] = None if spy_baseline is None else round(spy_baseline, 6)
+        report["baseline_comparison_expectancy_usd"] = None if comparison_baseline is None else round(comparison_baseline, 6)
+        report["baseline_comparison_rule"] = "max(spy_buy_hold_same_window, random_timed_entry)"
+        report["baseline_unit"] = "average_net_pnl_usd_per_signal_for_this_exact_variant"
+        output["|".join(key)] = report
+    return output
+
+
+def _comparison_baseline(spy_baseline: float | None, random_baseline: float | None) -> float | None:
+    values = [value for value in (spy_baseline, random_baseline) if value is not None]
+    if not values:
+        return None
+    return max(values)
+
+
+def _random_variant_baseline(
+    records: list[dict[str, Any]],
+    signals_by_id: dict[str, dict[str, Any]],
+    bar_dicts_by_symbol: dict[str, list[dict[str, Any]]],
+    policy: ScoringPolicy,
+    rule_name: str,
+    sizing_name: str,
+) -> float | None:
+    samples: list[float] = []
+    for record in records:
+        signal = signals_by_id.get(str(record["signal_id"]))
+        bars = bar_dicts_by_symbol.get(str(record["symbol"]).upper(), [])
+        if not signal or not bars:
+            continue
+        value = random_timed_entry_expectancy(
+            signal,
+            bars,
+            policy,
+            rule_name=rule_name,
+            sizing_name=sizing_name,
+        )
+        if value is not None:
+            samples.append(value)
+    if not samples:
+        return None
+    return sum(samples) / len(samples)
+
+
 def _earliest_bar_ts(series_by_symbol: dict[str, PriceSeries]) -> datetime | None:
     starts = [series.bars[0].ts for series in series_by_symbol.values() if series.bars]
     return min(starts) if starts else None
@@ -236,9 +320,44 @@ def _universe_status(measurement_gate: dict[str, Any], spy_baseline: float | Non
     return "measurement_preview_ready_for_verdict"
 
 
-def _universe_action_verdict(measurement_gate: dict[str, Any], spy_baseline: float | None, report: dict[str, Any]) -> str:
+def _variant_verdict(grouped: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    advances = _qualifying_variants(grouped)
+    if advances:
+        return {"action": "advance", "variants": advances}
+    if any(report.get("action_verdict") == "rerun_one_correction" for report in grouped.values()):
+        return {"action": "rerun_one_correction", "variants": []}
+    if any(report.get("action_verdict") == "kill_source" for report in grouped.values()):
+        return {"action": "kill_source", "variants": []}
+    return {"action": "unmeasurable", "variants": []}
+
+
+def _qualifying_variants(grouped: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    advances = []
+    for key, report in grouped.items():
+        if report.get("action_verdict") != "advance":
+            continue
+        advances.append({
+            "variant": key,
+            "settled_n": report.get("settled_n"),
+            "net_expectancy_per_signal_usd": report.get("net_expectancy_per_signal_usd"),
+            "live_haircut_expectancy_usd": report.get("live_haircut_expectancy_usd"),
+            "baseline_comparison_expectancy_usd": report.get("baseline_comparison_expectancy_usd"),
+            "baseline_spy_buy_hold_same_window_expectancy_usd": report.get("baseline_spy_buy_hold_same_window_expectancy_usd"),
+            "baseline_random_timed_entry_expectancy_usd": report.get("baseline_random_timed_entry_expectancy_usd"),
+            "beats_baseline": report.get("beats_baseline"),
+            "worst_single_usd": report.get("worst_single_usd"),
+            "max_drawdown_usd": report.get("max_drawdown_usd"),
+        })
+    return sorted(
+        advances,
+        key=lambda item: float(item.get("live_haircut_expectancy_usd") or 0),
+        reverse=True,
+    )
+
+
+def _universe_action_verdict(measurement_gate: dict[str, Any], spy_baseline: float | None, variant_verdict: dict[str, Any]) -> str:
     if not measurement_gate["ready"]:
         return "continue_collecting"
     if spy_baseline is None:
         return "unmeasurable"
-    return str(report["action_verdict"])
+    return str(variant_verdict["action"])
