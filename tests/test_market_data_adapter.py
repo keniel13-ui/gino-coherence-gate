@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta, timezone
+import json
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -69,6 +71,20 @@ def test_normalizes_quote_response():
     assert quote.price == 123.45
     assert quote.bid == 123.4
     assert quote.ask == 123.5
+
+
+def test_normalizes_real_robinhood_nested_quote_response_if_present():
+    path = Path("manifests/aapl_quote.raw.json")
+    if not path.exists():
+        pytest.skip("live AAPL quote capture is local/gitignored")
+
+    quote = normalize_quote_response("AAPL", json.loads(path.read_text()))
+
+    assert quote.symbol == "AAPL"
+    assert quote.price == 297.21
+    assert quote.ts == "2026-06-18T23:58:36.989385674Z"
+    assert quote.bid == 290.0
+    assert quote.ask == 303.0
 
 
 def test_adapter_feeds_owned_signal_engine_through_read_only_gate():

@@ -49,6 +49,23 @@ Boundary: this path does not authenticate to Robinhood and does not call orders.
    - receipt includes `result_hash`,
    - no order/review/place/cancel tool was called.
 
+## First Live Shape Finding
+
+The first captured Robinhood quote response used this nested shape:
+
+```text
+data.results[].quote
+data.results[].close
+```
+
+The active quote fields live under `quote`; `close` is a separate object and must not be parsed as a numeric quote price. The quote normalizer therefore:
+
+- drills into `data.results[].quote`,
+- prefers the freshest actual trade price from `last_trade_price` / `last_non_reg_trade_price`,
+- falls back to bid/ask only if no trade price exists,
+- carries the selected trade timestamp as `Quote.ts`,
+- keeps bid/ask as separate fields.
+
 ## Verification
 
 Fixture smoke:
