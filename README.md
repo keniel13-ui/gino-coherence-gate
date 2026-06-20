@@ -18,6 +18,7 @@ This project implements the local, deterministic gate that sits between an agent
 - Enforce the results gate: min settled N or decision timebox, one correction only, live-performance haircut, baseline-required advancement, late-call detector, and consecutive-loss survival metric.
 - Normalize gate-mediated read-only market data into `PriceSeries` / `Quote` and feed owned signal sources.
 - Receipt one captured live read response with a deterministic gate verdict and result hash.
+- Run a money-safe shadow-score preview from saved read-only historical data without treating variant records as independent signals.
 - Assess whether a captured MCP manifest can support a read-only Gino setup visit.
 - Normalize a user-authenticated MCP `tools/list` capture into the gate manifest shape.
 - Keep the Gino visit checklist explicit: read-only first, customer feeds optional, no credentials handled by Keniel.
@@ -80,6 +81,10 @@ python3 scripts/live_read_once.py --tool get_equity_quotes --symbol AAPL --respo
 ```
 
 ```bash
+python3 scripts/shadow_score_saved_historicals.py --symbol AAPL --historicals-json manifests/aapl_hist.raw.json
+```
+
+```bash
 python3 scripts/gino_visit_readiness.py
 ```
 
@@ -112,6 +117,10 @@ Read-only market-data path:
 Live read-once path:
 
 `docs/live_read_once_path_2026-06-19.md`
+
+Shadow score preview:
+
+`docs/shadow_score_preview_2026-06-19.md`
 
 ## Unit Tests
 
