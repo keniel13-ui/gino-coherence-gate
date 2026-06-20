@@ -9,6 +9,8 @@ READ_HINTS = ("quote", "quotes", "position", "positions", "portfolio", "account"
 REVIEW_HINTS = ("review", "preview", "dry_run", "dryrun", "estimate")
 PLACE_HINTS = ("place", "submit", "create_order", "buy", "sell")
 CANCEL_HINTS = ("cancel", "void")
+WRITE_PREFIXES = ("create_", "update_", "add_", "remove_", "follow_", "unfollow_")
+WRITE_HINTS = ("create", "update", "add_", "remove", "follow", "unfollow", "configure", "config", "filters")
 
 
 @dataclass(frozen=True)
@@ -29,6 +31,12 @@ def classify_tool(name: str) -> ToolClassification:
 
     if any(hint in lowered for hint in REVIEW_HINTS):
         return ToolClassification(name, "review", "review/preview-like tool name")
+
+    if lowered.startswith(WRITE_PREFIXES) or any(hint in lowered for hint in WRITE_HINTS):
+        return ToolClassification(name, "write", "write/mutation-like tool name")
+
+    if lowered == "run_scan":
+        return ToolClassification(name, "read", "scan execution returns market data")
 
     if lowered.startswith(READ_PREFIXES) or any(hint in lowered for hint in READ_HINTS):
         return ToolClassification(name, "read", "read-like tool name")

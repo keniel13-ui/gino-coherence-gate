@@ -9,6 +9,7 @@ This project implements the local, deterministic gate that sits between an agent
 - Load and hash a frozen `PolicyEnvelope`.
 - Classify a live or sample MCP tool manifest into read, review, trade, and unknown tools.
 - Expose read-only mode by filtering/refusing non-read tools.
+- Bind confirmed Robinhood MCP read/data tool names while blocking all order and write tools.
 - Recompute policy decisions from structured inputs, not model judgment.
 - Emit append-only `DecisionReceipt` records with a hash chain and HMAC signature.
 - Load and hash a frozen `ScoringPolicy`.
@@ -88,6 +89,10 @@ Visit checklist:
 Manifest capture checklist:
 
 `docs/robinhood_manifest_capture.md`
+
+Confirmed tool binding:
+
+`docs/robinhood_confirmed_tool_binding_2026-06-19.md`
 
 ## Unit Tests
 
