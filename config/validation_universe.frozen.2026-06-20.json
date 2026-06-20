@@ -1,0 +1,43 @@
+{
+  "universe_id": "validation-uncurated-2026-06-20",
+  "declared_at_utc": "2026-06-20T14:42:54.088220Z",
+  "purpose": "PRE-DECLARED un-curated validation universe. Frozen BEFORE seeing any results (pre-registration). Tests whether the curated-winners RSI2 result survives on stocks NOT selected for performance.",
+  "selection_method": "seeded random.sample from a broad sector-diversified liquid US pool, excluding the 10 curated winners already used",
+  "seed": 20260620,
+  "pool_size": 83,
+  "n_selected": 18,
+  "excluded_curated_winners": [
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "AMZN",
+    "GOOGL",
+    "META",
+    "TSLA",
+    "AMD",
+    "AVGO",
+    "JPM"
+  ],
+  "symbols": [
+    "ADBE",
+    "COST",
+    "CSCO",
+    "CVX",
+    "D",
+    "F",
+    "HD",
+    "INTC",
+    "JNJ",
+    "LIN",
+    "MMM",
+    "MS",
+    "O",
+    "SCHW",
+    "SO",
+    "T",
+    "VZ",
+    "WMB"
+  ],
+  "honest_limit_unfixed": "Removes SURVIVORSHIP bias only. Regime bias remains: same 2025-06->2026-06 window (one bull-ish regime). Full validation also needs forward/paper testing over future/other regimes.",
+  "baseline_symbol": "SPY"
+}
