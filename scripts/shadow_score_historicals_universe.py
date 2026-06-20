@@ -30,6 +30,8 @@ def main() -> int:
     parser.add_argument("--receipts", default="var/shadow_score_universe_receipts.jsonl")
     parser.add_argument("--output", default="var/shadow_score_universe_report.json")
     parser.add_argument("--run-id", default="shadow-score-universe-preview")
+    parser.add_argument("--universe-label", default="unspecified")
+    parser.add_argument("--selection-method", default="undeclared")
     args = parser.parse_args()
 
     payloads = _load_payloads(args.symbol_json, args.historicals_dir)
@@ -39,7 +41,16 @@ def main() -> int:
     spy_payload = json.loads(Path(args.spy_json).read_text()) if args.spy_json else None
     scoring_policy = ScoringPolicy.from_file(args.scoring_policy)
     gate_policy = PolicyEnvelope.from_file(args.gate_policy)
-    report = shadow_score_historicals_universe_payloads(payloads, scoring_policy, spy_payload=spy_payload)
+    sample_metadata = {
+        "universe_label": args.universe_label,
+        "selection_method": args.selection_method,
+    }
+    report = shadow_score_historicals_universe_payloads(
+        payloads,
+        scoring_policy,
+        spy_payload=spy_payload,
+        sample_metadata=sample_metadata,
+    )
 
     output_path = Path(args.output)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,6 +66,8 @@ def main() -> int:
                 "symbols": sorted(payloads),
                 "spy_json": args.spy_json,
                 "scoring_policy_hash": scoring_policy.policy_hash,
+                "universe_label": args.universe_label,
+                "selection_method": args.selection_method,
             },
         },
         knows_ref="saved_receipted_historicals_universe",
@@ -79,6 +92,7 @@ def main() -> int:
         "baseline": report["baseline"],
         "action_verdict": report["action_verdict"],
         "decision_ready": report["decision_ready"],
+        "validation_audit": report["validation_audit"],
         "output": str(output_path),
         "receipt_path": args.receipts,
         "receipt_hash": receipt["this_hash"],

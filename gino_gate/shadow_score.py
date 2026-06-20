@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timezone
 from typing import Any
 
@@ -75,6 +76,7 @@ def shadow_score_universe(
     *,
     spy_series: PriceSeries | None = None,
     as_of: datetime | None = None,
+    sample_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Shadow-score a saved symbol universe with baseline discipline."""
     signals: list[dict[str, Any]] = []
@@ -130,7 +132,7 @@ def shadow_score_universe(
     variant_verdict = _variant_verdict(grouped)
     action_verdict = _universe_action_verdict(measurement_gate, spy_baseline, variant_verdict)
 
-    return {
+    result = {
         "status": status,
         "symbols": sorted(series_by_symbol),
         "symbol_count": len(series_by_symbol),
@@ -152,6 +154,8 @@ def shadow_score_universe(
         "action_verdict": action_verdict,
         "decision_ready": measurement_gate["ready"] and spy_baseline is not None and bool(grouped),
     }
+    result["validation_audit"] = _validation_audit(result, policy, series_by_symbol, sample_metadata or {})
+    return result
 
 
 def shadow_score_historicals_payload(symbol: str, payload: Any, policy: ScoringPolicy) -> dict[str, Any]:
@@ -163,13 +167,14 @@ def shadow_score_historicals_universe_payloads(
     policy: ScoringPolicy,
     *,
     spy_payload: Any | None = None,
+    sample_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     series_by_symbol = {
         symbol.upper(): normalize_historicals_response(symbol, payload)
         for symbol, payload in payloads_by_symbol.items()
     }
     spy_series = normalize_historicals_response("SPY", spy_payload) if spy_payload is not None else None
-    return shadow_score_universe(series_by_symbol, policy, spy_series=spy_series)
+    return shadow_score_universe(series_by_symbol, policy, spy_series=spy_series, sample_metadata=sample_metadata)
 
 
 def _bar_as_dict(bar: Bar) -> dict[str, Any]:
@@ -361,3 +366,58 @@ def _universe_action_verdict(measurement_gate: dict[str, Any], spy_baseline: flo
     if spy_baseline is None:
         return "unmeasurable"
     return str(variant_verdict["action"])
+
+
+def _validation_audit(
+    result: dict[str, Any],
+    policy: ScoringPolicy,
+    series_by_symbol: dict[str, PriceSeries],
+    sample_metadata: dict[str, Any],
+) -> dict[str, Any]:
+    signals = result.get("signals", [])
+    source_counts = dict(Counter(str(signal.get("source", "unknown")) for signal in signals))
+    enabled_sources = sorted(
+        source
+        for source, config in policy.raw.get("sources", {}).items()
+        if isinstance(config, dict) and config.get("enabled") is True
+    )
+    zero_enabled_sources = [
+        source
+        for source in enabled_sources
+        if source.startswith("own:") and source_counts.get(source, 0) == 0
+    ]
+    bar_counts = {symbol: len(series.bars) for symbol, series in series_by_symbol.items()}
+    selection_method = str(sample_metadata.get("selection_method") or "undeclared")
+    warnings = []
+
+    if selection_method not in {"predeclared_random", "predeclared_index", "predeclared_liquid_universe"}:
+        warnings.append("sample_selection_not_predeclared_or_uncurated")
+    if len(source_counts) == 1:
+        warnings.append("single_signal_family_only")
+    if "own:ts_momentum" in zero_enabled_sources:
+        warnings.append("ts_momentum_zero_signals")
+    if bar_counts and max(bar_counts.values()) <= 252:
+        warnings.append("history_too_short_for_252_bar_momentum")
+    if result.get("action_verdict") == "advance":
+        warnings.append("advance_means_forward_validation_not_live_trading")
+
+    return {
+        "edge_claim_status": "forward_validation_required",
+        "funding_allowed": False,
+        "live_trading_allowed": False,
+        "sample_label": sample_metadata.get("universe_label") or "unspecified",
+        "selection_method": selection_method,
+        "source_signal_counts": source_counts,
+        "enabled_sources": enabled_sources,
+        "zero_signal_enabled_sources": zero_enabled_sources,
+        "bar_count_min": min(bar_counts.values()) if bar_counts else 0,
+        "bar_count_max": max(bar_counts.values()) if bar_counts else 0,
+        "warnings": warnings,
+        "requirements_before_live": [
+            "predeclared_uncurated_or_random_symbol_universe",
+            "out_of_sample_or_forward_paper_validation",
+            "proper_baselines_on_each_exact_variant",
+            "review_zero-signal_sources_before claiming multi-source edge",
+        ],
+        "note": "Historical shadow-score advance is permission to run stricter validation, not permission to fund or trade.",
+    }

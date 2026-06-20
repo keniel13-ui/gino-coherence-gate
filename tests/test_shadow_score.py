@@ -87,3 +87,31 @@ def test_universe_shadow_score_with_spy_baseline_is_decision_eligible():
     if result["action_verdict"] == "advance":
         assert result["qualifying_variants"]
         assert all(item["beats_baseline"] is True for item in result["qualifying_variants"])
+
+
+def test_universe_shadow_score_audits_biased_or_incomplete_sample():
+    policy = _policy()
+    series_by_symbol = {
+        f"S{idx:02d}": normalize_historicals_response(f"S{idx:02d}", _historicals(260))
+        for idx in range(policy.min_settled_n)
+    }
+    spy_series = normalize_historicals_response("SPY", _historicals(260))
+
+    result = shadow_score_universe(
+        series_by_symbol,
+        policy,
+        spy_series=spy_series,
+        sample_metadata={"universe_label": "synthetic-winners", "selection_method": "curated"},
+    )
+    audit = result["validation_audit"]
+
+    assert audit["edge_claim_status"] == "forward_validation_required"
+    assert audit["funding_allowed"] is False
+    assert audit["live_trading_allowed"] is False
+    assert audit["selection_method"] == "curated"
+    assert audit["source_signal_counts"] == {"own:ts_momentum": policy.min_settled_n}
+    assert "own:rsi2" in audit["zero_signal_enabled_sources"]
+    assert "sample_selection_not_predeclared_or_uncurated" in audit["warnings"]
+    assert "single_signal_family_only" in audit["warnings"]
+    if result["action_verdict"] == "advance":
+        assert "advance_means_forward_validation_not_live_trading" in audit["warnings"]
