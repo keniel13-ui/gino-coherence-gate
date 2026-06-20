@@ -16,6 +16,7 @@ This project implements the local, deterministic gate that sits between an agent
 - Simulate captured signals against OHLC price paths with latency, slippage, fees, take-profit, stop, time-stop, MFE/MAE, and position sizing.
 - Aggregate scorer metrics into action verdicts: `continue_collecting`, `advance`, `kill_source`, `rerun_one_correction`, or `unmeasurable`.
 - Enforce the results gate: min settled N or decision timebox, one correction only, live-performance haircut, baseline-required advancement, late-call detector, and consecutive-loss survival metric.
+- Normalize gate-mediated read-only market data into `PriceSeries` / `Quote` and feed owned signal sources.
 - Assess whether a captured MCP manifest can support a read-only Gino setup visit.
 - Normalize a user-authenticated MCP `tools/list` capture into the gate manifest shape.
 - Keep the Gino visit checklist explicit: read-only first, customer feeds optional, no credentials handled by Keniel.
@@ -27,7 +28,7 @@ This project implements the local, deterministic gate that sits between an agent
 - Automated authenticated manifest dump from `https://agent.robinhood.com/mcp/trading`. The manual capture/normalize path exists; authentication still happens in an official MCP client with the account owner present.
 - `review_equity_order` shadow execution.
 - Paper fills or live order forwarding.
-- Historical market-data adapter for backlog scoring.
+- Live gate-mediated market-data client. The read-only adapter is fixture-tested, but no live market-data tool call has been made from this repo yet.
 - SPY/random baseline data adapters. The scorer already requires baseline comparison before advance; the data source still needs to be connected.
 
 ## Frozen Policy Anchor
@@ -69,6 +70,10 @@ python3 scripts/smoke_signal_scorer.py
 ```
 
 ```bash
+python3 scripts/smoke_market_data_adapter.py
+```
+
+```bash
 python3 scripts/gino_visit_readiness.py
 ```
 
@@ -93,6 +98,10 @@ Manifest capture checklist:
 Confirmed tool binding:
 
 `docs/robinhood_confirmed_tool_binding_2026-06-19.md`
+
+Read-only market-data path:
+
+`docs/read_only_market_data_path_2026-06-19.md`
 
 ## Unit Tests
 
