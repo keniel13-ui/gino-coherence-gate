@@ -17,6 +17,7 @@ This project implements the local, deterministic gate that sits between an agent
 - Aggregate scorer metrics into action verdicts: `continue_collecting`, `advance`, `kill_source`, `rerun_one_correction`, or `unmeasurable`.
 - Enforce the results gate: min settled N or decision timebox, one correction only, live-performance haircut, baseline-required advancement, late-call detector, and consecutive-loss survival metric.
 - Normalize gate-mediated read-only market data into `PriceSeries` / `Quote` and feed owned signal sources.
+- Receipt one captured live read response with a deterministic gate verdict and result hash.
 - Assess whether a captured MCP manifest can support a read-only Gino setup visit.
 - Normalize a user-authenticated MCP `tools/list` capture into the gate manifest shape.
 - Keep the Gino visit checklist explicit: read-only first, customer feeds optional, no credentials handled by Keniel.
@@ -29,6 +30,7 @@ This project implements the local, deterministic gate that sits between an agent
 - `review_equity_order` shadow execution.
 - Paper fills or live order forwarding.
 - Live gate-mediated market-data client. The read-only adapter is fixture-tested, but no live market-data tool call has been made from this repo yet.
+- Python-native Robinhood MCP OAuth/client transport. Current live-read path receipts responses captured through an official MCP client.
 - SPY/random baseline data adapters. The scorer already requires baseline comparison before advance; the data source still needs to be connected.
 
 ## Frozen Policy Anchor
@@ -74,6 +76,10 @@ python3 scripts/smoke_market_data_adapter.py
 ```
 
 ```bash
+python3 scripts/live_read_once.py --tool get_equity_quotes --symbol AAPL --response-json path/to/captured_quote.json
+```
+
+```bash
 python3 scripts/gino_visit_readiness.py
 ```
 
@@ -102,6 +108,10 @@ Confirmed tool binding:
 Read-only market-data path:
 
 `docs/read_only_market_data_path_2026-06-19.md`
+
+Live read-once path:
+
+`docs/live_read_once_path_2026-06-19.md`
 
 ## Unit Tests
 
