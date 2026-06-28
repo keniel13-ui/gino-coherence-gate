@@ -72,3 +72,27 @@ def test_chat_agent_captures_profile_rule_in_memory(tmp_path):
 
     assert "recorded max loss as: 50" in response.message
     assert agent.memory.captured_profile["max_loss"] == "50"
+
+
+def test_chat_agent_parses_pasted_discord_call_with_stop_and_target(tmp_path):
+    agent = GinoChatAgent(_sample_csv(tmp_path))
+
+    response = agent.reply("Discord call: AAPL 7/19 200c @2.50 TP 210 SL 190")
+
+    assert response.verdict is not None
+    assert response.verdict.ticker == "AAPL"
+    assert response.verdict.verdict == "REVIEW_ELIGIBLE"
+    assert "pasted Discord call" in response.message
+    assert "target: TP 210" in response.message
+    assert "not a live Robinhood order" in response.message
+
+
+def test_chat_agent_keeps_pasted_discord_call_without_stop_target_paper_only(tmp_path):
+    agent = GinoChatAgent(_sample_csv(tmp_path))
+
+    response = agent.reply("NVDA 230c 7/19 @4.20 looks strong")
+
+    assert response.verdict is not None
+    assert response.verdict.ticker == "NVDA"
+    assert response.verdict.verdict == "PAPER_ONLY"
+    assert "stop not live-enforceable" in response.message

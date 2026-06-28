@@ -54,6 +54,17 @@ class GinoChatAgent:
             self.memory.remember(text, response)
             return ChatResponse(response, verdict=verdict)
 
+        live_call = self._parse_pasted_discord_call(text)
+        if live_call is not None:
+            verdict = explain_call(live_call)
+            response = (
+                "I parsed this as a pasted Discord call.\n\n"
+                f"{_format_verdict(verdict)}\n\n"
+                "Boundary: this is a paper/shadow verdict from pasted text, not a live Robinhood order."
+            )
+            self.memory.remember(text, response)
+            return ChatResponse(response, verdict=verdict)
+
         if captured := self._capture_profile(text):
             return self._remembered(text, captured)
 
@@ -155,6 +166,33 @@ class GinoChatAgent:
         ticker = (found.group("ticker") or "").upper()
         return found.group("row"), ticker
 
+    def _parse_pasted_discord_call(self, text: str) -> dict[str, str] | None:
+        normalized = re.sub(r"\s+", " ", text.strip())
+        if not normalized:
+            return None
+
+        contract = _extract_option_contract(normalized)
+        ticker = _extract_ticker(normalized, contract)
+        if not ticker or not contract:
+            return None
+
+        direction = "Call" if re.search(r"\d\s*[cC]\b", contract) else "Put"
+        source = self.memory.captured_profile.get("source", "pasted_discord_call")
+        return {
+            "#": "live-paste",
+            "Trader": source,
+            "Date": "",
+            "Time": "",
+            "Ticker": ticker,
+            "Direction": direction,
+            "Contract / Fill": contract,
+            "Event Type": "ENTRY",
+            "Mark": "",
+            "P/L %": "",
+            "P/L $": "",
+            "Trader Commentary": normalized,
+        }
+
     def _read_row(self, row_id: str, *, ticker: str = "") -> dict[str, str]:
         matches: list[dict[str, str]] = []
         with self.source_csv.open("r", newline="", encoding="utf-8") as fh:
@@ -182,3 +220,45 @@ def _format_verdict(verdict: OperatorVerdict) -> str:
         f"{verdict.summary}\n\n"
         f"Reasons:\n{reasons}"
     )
+
+
+def _extract_option_contract(text: str) -> str | None:
+    patterns = [
+        # AAPL 7/19 200c @2.50 -> 7/19 200c @2.50
+        r"\b(?P<expiry>\d{1,2}/\d{1,2}(?:/\d{2,4})?)\s+\$?(?P<strike>\d+(?:\.\d+)?)\s*(?P<kind>[cCpP])(?:\s*@\s*\$?(?P<price>\d*(?:\.\d+)?))?",
+        # AAPL 200c 7/19 @2.50 -> 200c 7/19 @2.50
+        r"\b(?P<strike>\d+(?:\.\d+)?)\s*(?P<kind>[cCpP])\s+(?P<expiry>\d{1,2}/\d{1,2}(?:/\d{2,4})?)(?:\s*@\s*\$?(?P<price>\d*(?:\.\d+)?))?",
+        # 20 MAR 26 70C
+        r"\b(?P<expiry>\d{1,2}\s+[A-Za-z]{3}\s+\d{2,4})\s+(?P<strike>\d+(?:\.\d+)?)\s*(?P<kind>[cCpP])\b",
+    ]
+    for pattern in patterns:
+        found = re.search(pattern, text)
+        if not found:
+            continue
+        parts = found.groupdict()
+        if pattern.startswith("\\b(?P<expiry>"):
+            contract = f"{parts['expiry']} {parts['strike']}{parts['kind'].lower()}"
+        else:
+            contract = f"{parts['strike']}{parts['kind'].lower()} {parts['expiry']}"
+        price = parts.get("price")
+        if price:
+            contract += f" @{price}"
+        return contract
+    return None
+
+
+def _extract_ticker(text: str, contract: str | None) -> str:
+    if not contract:
+        return ""
+    contract_index = text.lower().find(contract.lower())
+    prefix = text if contract_index < 0 else text[:contract_index]
+    candidates = re.findall(r"\$?\b([A-Z]{1,6})\b", prefix)
+    ignored = {"SL", "TP", "CALL", "PUT", "BUY", "SELL", "ENTRY", "STOP", "TARGET"}
+    for candidate in reversed(candidates):
+        if candidate.upper() not in ignored:
+            return candidate.upper()
+    all_candidates = re.findall(r"\$?\b([A-Z]{1,6})\b", text)
+    for candidate in all_candidates:
+        if candidate.upper() not in ignored:
+            return candidate.upper()
+    return ""

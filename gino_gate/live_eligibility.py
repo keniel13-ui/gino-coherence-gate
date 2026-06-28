@@ -55,8 +55,8 @@ def _numbers(text: str) -> list[float]:
 def _target_fragment(commentary: str) -> str:
     text = _norm(commentary)
     patterns = [
-        r"\bTP\s+([^;,]+)",
-        r"\btarget(?:ing)?\s+([^;,]+)",
+        r"\bTP\s+(.+?)(?=\bSL\b|\bstop\b|[,;]|$)",
+        r"\btarget(?:ing)?\s+(.+?)(?=\bSL\b|\bstop\b|[,;]|$)",
     ]
     for pattern in patterns:
         found = re.search(pattern, text, flags=re.IGNORECASE)
