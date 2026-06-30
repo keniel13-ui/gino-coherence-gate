@@ -3,3 +3,22 @@ __pycache__/
 *.pyc
 var/
 manifests/*.json
+
+# Secrets / credentials / tokens — never commit
+.env
+.env.*
+*.env
+.envrc
+*.token
+*_token
+*token.txt
+*.secret
+secrets/
+credentials.json
+*_credentials.json
+*telegram*token*
+*bot*token*
+service_account*.json
+
+# OS noise
+.DS_Store
