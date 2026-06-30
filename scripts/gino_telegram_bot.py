@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import sys
 import time
 import urllib.parse
@@ -13,6 +14,7 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from gino_gate.chat_agent import DEFAULT_SOURCE_CSV, GinoChatAgent
+from gino_gate.interaction_log import InteractionLog
 
 
 class TelegramClient:
@@ -46,14 +48,27 @@ class TelegramClient:
             return json.loads(response.read().decode("utf-8"))
 
 
-def run_bot(client: TelegramClient, agent: GinoChatAgent) -> None:
+BASE_BACKOFF = 3.0
+MAX_BACKOFF = 60.0
+
+
+def run_bot(client: TelegramClient, agent: GinoChatAgent, *, log: InteractionLog | None = None) -> None:
     print("Gino Telegram agent is running in paper/shadow mode.")
     print("Open Telegram, message the bot, and send: what can you do?")
     print("Press Ctrl+C to stop.")
     offset: int | None = None
+    backoff = BASE_BACKOFF
+    last_error_kind: str | None = None
+    repeat = 0
     while True:
         try:
             updates = client.get_updates(offset=offset)
+            # Reset resilience state on any successful poll.
+            backoff = BASE_BACKOFF
+            if last_error_kind is not None:
+                print("Telegram connection recovered.", file=sys.stderr)
+                last_error_kind = None
+                repeat = 0
             for update in updates:
                 offset = int(update["update_id"]) + 1
                 message = update.get("message") or {}
@@ -63,22 +78,49 @@ def run_bot(client: TelegramClient, agent: GinoChatAgent) -> None:
                 if chat_id is None or not text:
                     continue
                 if text.lower() in {"/start", "start"}:
-                    client.send_message(
-                        chat_id,
-                        "Gino agent is online in paper/shadow mode. I can talk through trades, rules, sources, discipline, and verdicts. I cannot place live Robinhood trades.",
+                    reply = (
+                        "Gino agent is online in paper/shadow mode. I can talk through trades, rules, "
+                        "sources, discipline, and verdicts. I cannot place live Robinhood trades."
                     )
+                    client.send_message(chat_id, reply)
+                    if log is not None:
+                        log.record(channel="telegram", chat_id=chat_id, user_text=text,
+                                   reply_text=reply, engine="deterministic")
                     continue
+                verdict_label: str | None = None
+                action_label: str | None = None
                 try:
-                    reply = agent.reply(text).message
+                    response = agent.reply(text)
+                    reply = response.message
+                    if response.verdict is not None:
+                        verdict_label = getattr(response.verdict, "verdict", None)
+                        action_label = getattr(response.verdict, "action", None)
                 except ValueError as exc:
                     reply = f"Error: {exc}"
                 client.send_message(chat_id, reply)
+                if log is not None:
+                    log.record(channel="telegram", chat_id=chat_id, user_text=text,
+                               reply_text=reply, engine="deterministic",
+                               verdict=verdict_label, action=action_label)
         except KeyboardInterrupt:
             print("\nStopped.")
             return
         except Exception as exc:
-            print(f"Telegram loop error: {exc}", file=sys.stderr)
-            time.sleep(3)
+            # Exponential backoff with jitter, and quiet the error flood: announce the
+            # first failure of a kind, then only every 10th, so a network outage does
+            # not machine-gun the log the way it did on 2026-06-29.
+            kind = type(exc).__name__
+            if kind == last_error_kind:
+                repeat += 1
+                if repeat % 10 == 0:
+                    print(f"Telegram still unreachable ({kind}), retrying every ~{backoff:.0f}s (x{repeat})",
+                          file=sys.stderr)
+            else:
+                print(f"Telegram loop error: {exc} — backing off, will retry quietly", file=sys.stderr)
+                last_error_kind = kind
+                repeat = 0
+            time.sleep(backoff + random.uniform(0, backoff * 0.25))
+            backoff = min(MAX_BACKOFF, backoff * 2)
 
 
 def main() -> int:
@@ -92,7 +134,7 @@ def main() -> int:
         print(f"Missing Telegram token. Set it first: export {args.token_env}='123:abc'", file=sys.stderr)
         return 2
 
-    run_bot(TelegramClient(token), GinoChatAgent(args.source_csv))
+    run_bot(TelegramClient(token), GinoChatAgent(args.source_csv), log=InteractionLog())
     return 0
 
 
