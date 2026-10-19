@@ -7,3 +7,17 @@ requires-python = ">=3.11"
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+
+[tool.ruff.lint]
+# Correctness-focused set. Line length and import order are not enforced so the
+# existing code does not need a mass reformat.
+select = ["E", "F", "W"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# `net_returns` is unused, but computing it raises if a settled record lacks
+# net_return_pct. Removing it would change scorer behavior, so it stays.
+"gino_gate/scoring_metrics.py" = ["F841"]

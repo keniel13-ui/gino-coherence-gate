@@ -4,7 +4,7 @@ import json
 import re
 import urllib.request
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 
 from .paper_forward import PaperPosition
 
