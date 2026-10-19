@@ -9,11 +9,31 @@ from typing import Any
 
 from .manifest import filter_manifest
 from .policy import PolicyEnvelope
-from .receipts import ReceiptChain
+from .receipts import ReceiptChain, verify_chain
 from .verdict import decide
 
 
 DEFAULT_SIGNING_KEY = b"dev-only-gino-gate-key"
+SIGNING_KEY_ENV = "GINO_GATE_LOG_KEY"
+
+
+def signing_key_from_env(*, warn: bool = True) -> bytes:
+    """Return the receipt HMAC key from the environment, or the public dev key.
+
+    The dev key is committed to this repo, so anyone can forge receipts signed with
+    it. Falling back keeps local smoke runs working, but say so on stderr so a real
+    run does not silently produce receipts that prove nothing.
+    """
+    key = os.environ.get(SIGNING_KEY_ENV, "").encode("utf-8")
+    if key:
+        return key
+    if warn:
+        print(
+            f"warning: {SIGNING_KEY_ENV} is not set; receipts are signed with the public dev key "
+            "and are not tamper-evident against anyone who has read this repo.",
+            file=sys.stderr,
+        )
+    return DEFAULT_SIGNING_KEY
 
 
 class ReadOnlyGate:
@@ -52,10 +72,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--manifest-json", help="Path to an upstream MCP manifest JSON file to classify")
     parser.add_argument("--call-tool", help="Attempt a local tool call through the gate")
     parser.add_argument("--args-json", default="{}", help="JSON object for --call-tool args")
+    parser.add_argument(
+        "--verify-receipts",
+        action="store_true",
+        help="Recompute the hash chain and signatures in --receipts and exit non-zero on any problem",
+    )
     args = parser.parse_args(argv)
 
+    key = signing_key_from_env()
+    if args.verify_receipts:
+        result = verify_chain(Path(args.receipts), key)
+        print(json.dumps({"ok": result.ok, "count": result.count, "problems": result.problems}, indent=2))
+        return 0 if result.ok else 1
+
     policy = PolicyEnvelope.from_file(args.policy)
-    key = os.environ.get("GINO_GATE_LOG_KEY", "").encode("utf-8") or DEFAULT_SIGNING_KEY
     gate = ReadOnlyGate(policy, Path(args.receipts), key)
 
     if args.manifest_json:
@@ -63,7 +93,13 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.call_tool:
-        result = gate.call_tool(args.call_tool, json.loads(args.args_json))
+        try:
+            call_args = json.loads(args.args_json)
+        except json.JSONDecodeError as exc:
+            parser.error(f"--args-json is not valid JSON: {exc}")
+        if not isinstance(call_args, dict):
+            parser.error("--args-json must be a JSON object")
+        result = gate.call_tool(args.call_tool, call_args)
         print(json.dumps(result, indent=2, sort_keys=True))
         return 0
 

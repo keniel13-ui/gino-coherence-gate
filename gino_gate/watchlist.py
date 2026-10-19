@@ -47,6 +47,9 @@ def _compute_missing(item: WatchlistItem) -> list[str]:
     return missing
 
 
+# What a ticker from the LLM must look like before it becomes a ledger receipt. The
+# model reads untrusted pasted text, so its output is treated as data and checked.
+_LLM_TICKER_RE = re.compile(r"^[A-Z]{1,6}(?:\.[A-Z])?$")
 _TICKER_RE = re.compile(r"\$([A-Z]{1,5})\b|\b([A-Z]{2,5})\s*\(")
 _TRIGGER_RE = re.compile(r"(?:break(?:s)?\s+above|above|over|clear(?:s)?|needs|reclaim(?:s)?)\s+\$?(\d+(?:\.\d+)?)", re.IGNORECASE)
 _TARGET_RE = re.compile(r"(?:toward|target|to|->|→)\s+\$?(\d+(?:\.\d+)?)|\$?(\d+(?:\.\d+)?)\s+(?:is\s+)?possible", re.IGNORECASE)
@@ -121,8 +124,13 @@ def _parse_with_ollama(text: str, *, model: str, timeout: int) -> list[Watchlist
         for obj in data:
             if not isinstance(obj, dict) or not obj.get("ticker"):
                 continue
+            ticker = str(obj["ticker"]).strip().upper().lstrip("$")
+            if not _LLM_TICKER_RE.match(ticker):
+                # Hallucinated or injected junk ("IGNORE PREVIOUS", "AAPL; rm") is dropped
+                # rather than recorded as a watch-list receipt.
+                continue
             item = WatchlistItem(
-                ticker=str(obj["ticker"]).upper().lstrip("$"),
+                ticker=ticker,
                 thesis=str(obj.get("thesis") or "").strip(),
                 trigger=(str(obj["trigger"]).strip() if obj.get("trigger") else None),
                 target=(str(obj["target"]).strip() if obj.get("target") else None),

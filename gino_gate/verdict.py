@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from datetime import datetime, time
 from typing import Any
 
@@ -20,11 +21,30 @@ def _parse_time(value: str) -> time:
     return time(int(hour), int(minute))
 
 
+class InvalidNumericInput(ValueError):
+    """A sizing or recompute value the gate cannot compare safely."""
+
+
+def _number(value: Any, field: str, *, allow_negative: bool = False) -> float:
+    # NaN compares False against every cap, so a NaN notional or position would
+    # silently pass every `>` check below. Infinity and unparseable strings are
+    # equally meaningless here. Reject them so the gate fails closed.
+    try:
+        number = float(value or 0)
+    except (TypeError, ValueError) as exc:
+        raise InvalidNumericInput(f"{field} is not a number: {value!r}") from exc
+    if not math.isfinite(number):
+        raise InvalidNumericInput(f"{field} is not finite: {value!r}")
+    if not allow_negative and number < 0:
+        raise InvalidNumericInput(f"{field} is negative: {value!r}")
+    return number
+
+
 def _notional(args: dict[str, Any]) -> float:
     if "notional_usd" in args:
-        return float(args["notional_usd"])
-    qty = float(args.get("qty", args.get("quantity", 0)) or 0)
-    price = float(args.get("price_usd", args.get("limit_price", 0)) or 0)
+        return _number(args["notional_usd"], "notional_usd")
+    qty = _number(args.get("qty", args.get("quantity", 0)), "qty")
+    price = _number(args.get("price_usd", args.get("limit_price", 0)), "price_usd")
     return qty * price
 
 
@@ -57,7 +77,8 @@ def decide(
         return Verdict("REFUSE", "non_executing_mode", f"{policy.mode} cannot forward place/cancel tools")
 
     max_age = float(authority.get("freshness_max_age_sec", 0) or 0)
-    if max_age and any(age > max_age for age in input_ages_sec):
+    # `not age <= max_age` also catches NaN ages, which `age > max_age` lets through.
+    if max_age and any(not float(age) <= max_age for age in input_ages_sec):
         return Verdict("REFUSE", "stale_input", f"Input age exceeds {max_age} seconds")
 
     if tool_kind == "read":
@@ -73,22 +94,28 @@ def decide(
     if symbol_allowlist is not None and symbol not in set(symbol_allowlist):
         return Verdict("REFUSE", "symbol_not_allowed", f"{symbol} not in symbol allowlist")
 
-    order_notional = _notional(args)
+    try:
+        order_notional = _notional(args)
+        position_after = _number(recompute.get("position_after_usd", 0), "position_after_usd", allow_negative=True)
+        rolling_after = _number(
+            recompute.get("rolling_window_after_usd", 0), "rolling_window_after_usd", allow_negative=True
+        )
+        daily_pnl = _number(recompute.get("daily_pnl_usd", 0), "daily_pnl_usd", allow_negative=True)
+    except InvalidNumericInput as exc:
+        return Verdict("REFUSE", "invalid_numeric_input", str(exc))
+
     max_order = float(authority.get("max_order_notional_usd", 0) or 0)
     if max_order and order_notional > max_order:
         return Verdict("REFUSE", "order_cap", f"Order notional {order_notional:.2f} > cap {max_order:.2f}")
 
-    position_after = float(recompute.get("position_after_usd", 0) or 0)
     position_cap = float(authority.get("max_position_notional_usd_per_symbol", 0) or 0)
     if position_cap and position_after > position_cap:
         return Verdict("REFUSE", "position_cap", f"Position after {position_after:.2f} > cap {position_cap:.2f}")
 
-    rolling_after = float(recompute.get("rolling_window_after_usd", 0) or 0)
     rolling_cap = float(authority.get("rolling_exposure", {}).get("max_cumulative_notional_usd", 0) or 0)
     if rolling_cap and rolling_after > rolling_cap:
         return Verdict("REFUSE", "rolling_exposure", f"Rolling exposure {rolling_after:.2f} > cap {rolling_cap:.2f}")
 
-    daily_pnl = float(recompute.get("daily_pnl_usd", 0) or 0)
     daily_loss_limit = float(authority.get("daily_loss_limit_usd", 0) or 0)
     if daily_loss_limit and daily_pnl <= -daily_loss_limit:
         return Verdict("REFUSE", "daily_loss_limit", f"Daily PnL {daily_pnl:.2f} <= -{daily_loss_limit:.2f}")

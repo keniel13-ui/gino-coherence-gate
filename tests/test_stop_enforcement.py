@@ -121,3 +121,15 @@ def test_enforce_expired_no_close_stops_filters_to_paper_ready_expired_positions
     assert len(rows) == 1
     assert rows[0].ticker == "TSLA"
     assert rows[0].stop_status == "STOP_TRIGGERED"
+
+
+def test_yahoo_urls_escape_symbol_path_and_query_characters():
+    from datetime import date
+
+    from gino_gate import expiry_settlement, stop_enforcement
+
+    plain = stop_enforcement.yahoo_chart_url("AAPL", date(2026, 6, 1), date(2026, 6, 2))
+    assert "/chart/AAPL?" in plain
+    hostile = stop_enforcement.yahoo_chart_url("A/../B?x=1&", date(2026, 6, 1), date(2026, 6, 2))
+    assert "/chart/A%2F..%2FB%3Fx%3D1%26?" in hostile
+    assert "/chart/%5EGSPC?" in expiry_settlement.yahoo_chart_url("^GSPC", date(2026, 6, 1))

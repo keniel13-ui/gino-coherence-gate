@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -21,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from gino_gate.live_read_client import ReceiptingReadToolClient
 from gino_gate.market_data_adapter import ReadOnlyMarketDataAdapter
 from gino_gate.policy import PolicyEnvelope
-from gino_gate.server import DEFAULT_SIGNING_KEY
+from gino_gate.server import signing_key_from_env
 
 
 def _read_json(path: str) -> Any:
@@ -46,7 +45,7 @@ def main() -> int:
     args = parser.parse_args()
 
     policy = PolicyEnvelope.from_file(args.policy)
-    signing_key = os.environ.get("GINO_GATE_LOG_KEY", "").encode("utf-8") or DEFAULT_SIGNING_KEY
+    signing_key = signing_key_from_env()
     client = ReceiptingReadToolClient(
         policy=policy,
         receipt_path=args.receipts,

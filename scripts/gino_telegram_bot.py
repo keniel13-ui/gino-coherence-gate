@@ -17,10 +17,21 @@ from gino_gate.chat_agent import DEFAULT_SOURCE_CSV, GinoChatAgent
 from gino_gate.interaction_log import InteractionLog
 
 
+def redact(text: str, secret: str) -> str:
+    return text.replace(secret, "<redacted>") if secret else text
+
+
+def parse_chat_allowlist(raw: str) -> set[int] | None:
+    """Parse a comma-separated list of Telegram chat IDs. Empty means no allowlist."""
+    ids = {int(part.strip()) for part in raw.split(",") if part.strip()}
+    return ids or None
+
+
 class TelegramClient:
     def __init__(self, token: str, *, timeout: int = 30):
         if not token:
             raise ValueError("Telegram bot token is required")
+        self._token = token
         self.base_url = f"https://api.telegram.org/bot{token}"
         self.timeout = timeout
 
@@ -44,15 +55,26 @@ class TelegramClient:
     def _request(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         encoded = urllib.parse.urlencode(params).encode("utf-8")
         request = urllib.request.Request(f"{self.base_url}/{method}", data=encoded, method="POST")
-        with urllib.request.urlopen(request, timeout=self.timeout + 10) as response:
-            return json.loads(response.read().decode("utf-8"))
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout + 10) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            # The bot token is part of the URL path. Some urllib/http.client errors echo
+            # the URL, and these errors are printed to the terminal and logs.
+            raise RuntimeError(redact(f"Telegram {method} request failed: {exc}", self._token)) from None
 
 
 BASE_BACKOFF = 3.0
 MAX_BACKOFF = 60.0
 
 
-def run_bot(client: TelegramClient, agent: GinoChatAgent, *, log: InteractionLog | None = None) -> None:
+def run_bot(
+    client: TelegramClient,
+    agent: GinoChatAgent,
+    *,
+    log: InteractionLog | None = None,
+    allowed_chat_ids: set[int] | None = None,
+) -> None:
     print("Gino Telegram agent is running in paper/shadow mode.")
     print("Open Telegram, message the bot, and send: what can you do?")
     print("Press Ctrl+C to stop.")
@@ -77,6 +99,11 @@ def run_bot(client: TelegramClient, agent: GinoChatAgent, *, log: InteractionLog
                 text = str(message.get("text") or "").strip()
                 if chat_id is None or not text:
                     continue
+                if allowed_chat_ids is not None and chat_id not in allowed_chat_ids:
+                    # Telegram bots are reachable by anyone who finds the username. Without
+                    # this check a stranger could query captured rows and fill the log.
+                    print(f"Ignored message from chat {chat_id} (not in allowlist).", file=sys.stderr)
+                    continue
                 if text.lower() in {"/start", "start"}:
                     reply = (
                         "Gino agent is online in paper/shadow mode. I can talk through trades, rules, "
@@ -97,6 +124,11 @@ def run_bot(client: TelegramClient, agent: GinoChatAgent, *, log: InteractionLog
                         action_label = getattr(response.verdict, "action", None)
                 except ValueError as exc:
                     reply = f"Error: {exc}"
+                except Exception as exc:
+                    # A handler bug must not fall through to the transport retry loop below:
+                    # that path backs off as if Telegram were down and the user gets no reply.
+                    print(f"Agent error on update {update.get('update_id')}: {exc!r}", file=sys.stderr)
+                    reply = "Error: I could not process that message. It was logged locally."
                 client.send_message(chat_id, reply)
                 if log is not None:
                     log.record(channel="telegram", chat_id=chat_id, user_text=text,
@@ -127,14 +159,36 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Run Gino's local paper/shadow agent as a Telegram bot.")
     parser.add_argument("--source-csv", type=Path, default=DEFAULT_SOURCE_CSV)
     parser.add_argument("--token-env", default="GINO_TELEGRAM_BOT_TOKEN")
+    parser.add_argument(
+        "--allowed-chat-ids-env",
+        default="GINO_TELEGRAM_ALLOWED_CHAT_IDS",
+        help="Env var holding comma-separated chat IDs allowed to talk to the bot. Unset means anyone.",
+    )
     args = parser.parse_args()
+
+    try:
+        allowed_chat_ids = parse_chat_allowlist(os.environ.get(args.allowed_chat_ids_env, ""))
+    except ValueError:
+        print(f"{args.allowed_chat_ids_env} must be comma-separated integer chat IDs", file=sys.stderr)
+        return 2
+    if allowed_chat_ids is None:
+        print(
+            f"warning: {args.allowed_chat_ids_env} is not set, so any Telegram user who finds this bot can "
+            "talk to it. Set it to Gino's chat ID once you have it.",
+            file=sys.stderr,
+        )
 
     token = os.environ.get(args.token_env, "").strip()
     if not token:
         print(f"Missing Telegram token. Set it first: export {args.token_env}='123:abc'", file=sys.stderr)
         return 2
 
-    run_bot(TelegramClient(token), GinoChatAgent(args.source_csv), log=InteractionLog())
+    run_bot(
+        TelegramClient(token),
+        GinoChatAgent(args.source_csv),
+        log=InteractionLog(),
+        allowed_chat_ids=allowed_chat_ids,
+    )
     return 0
 
 

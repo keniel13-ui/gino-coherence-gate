@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -123,7 +124,7 @@ def parse_stop_rule(position: PaperPosition) -> StopRule:
 def yahoo_chart_url(symbol: str, start_date: date, end_date: date) -> str:
     start = int(datetime(start_date.year, start_date.month, start_date.day, tzinfo=UTC).timestamp()) - 86400
     end = int(datetime(end_date.year, end_date.month, end_date.day, tzinfo=UTC).timestamp()) + 2 * 86400
-    return f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?period1={start}&period2={end}&interval=1d"
+    return f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol, safe='')}?period1={start}&period2={end}&interval=1d"
 
 
 def fetch_yahoo_daily_bars(symbol: str, start_date: date, end_date: date) -> tuple[list[DailyBar], str, str]:

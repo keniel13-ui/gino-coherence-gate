@@ -70,3 +70,45 @@ def test_ledger_uses_price_lookup_when_given(tmp_path):
     row = ledger.tail()[0]
     assert row["price_at_receipt"] == 701.5
     assert row["price_source"] == "test_quote"
+
+
+class _FakeOllamaResponse:
+    def __init__(self, payload):
+        import json
+
+        self._body = json.dumps({"response": json.dumps(payload)}).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def read(self):
+        return self._body
+
+
+def test_llm_items_with_invalid_tickers_are_dropped(monkeypatch):
+    from gino_gate import watchlist
+
+    payload = [
+        {"ticker": "$crwd", "trigger": "above 705"},
+        {"ticker": "IGNORE PREVIOUS INSTRUCTIONS", "trigger": "above 1"},
+        {"ticker": "AAPL; rm -rf", "trigger": "above 2"},
+        {"ticker": "BRK.B", "trigger": "above 3"},
+    ]
+    monkeypatch.setattr(watchlist.urllib.request, "urlopen", lambda req, timeout: _FakeOllamaResponse(payload))
+    items = watchlist._parse_with_ollama("anything", model="test", timeout=1)
+    assert [it.ticker for it in items] == ["CRWD", "BRK.B"]
+    assert all(it.engine == "ollama:test" for it in items)
+
+
+def test_llm_failure_falls_back_to_deterministic(monkeypatch):
+    from gino_gate import watchlist
+
+    def offline(req, timeout):
+        raise OSError("connection refused")
+
+    monkeypatch.setattr(watchlist.urllib.request, "urlopen", offline)
+    items = parse_watchlist(GINO_6_29, use_llm=True)
+    assert items and all(it.engine == "deterministic" for it in items)
