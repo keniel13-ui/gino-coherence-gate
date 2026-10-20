@@ -22,6 +22,9 @@ This project implements the local, deterministic gate that sits between an agent
 - Assess whether a captured MCP manifest can support a read-only Gino setup visit.
 - Normalize a user-authenticated MCP `tools/list` capture into the gate manifest shape.
 - Keep the Gino visit checklist explicit: read-only first, customer feeds optional, no credentials handled by Keniel.
+- Replay a captured PlayBit Discord signal chain through trade intents, paper-forward positions, expiry settlement, stop enforcement, live eligibility, and a settled scorecard (`scripts/*_playbit_*.py`).
+- Run a deterministic paper/shadow operator agent that returns `REFUSE`, `PAPER_ONLY`, or `REVIEW_ELIGIBLE` for captured rows and pasted calls, over a local CLI, Telegram, or a Discord monitor (`docs/mac_mini_setup.md`).
+- Parse free-form watch lists into hypotheses (optionally with a local Ollama model that only structures text) and record them in a local ledger.
 
 ## Not Yet Implemented
 
@@ -61,6 +64,11 @@ Latest pushed commit at the time this README was updated:
 `76495de872c90dcba0939b828558e67b47795615`
 
 Authenticated live manifest verification is still pending.
+
+## Requirements
+
+Python 3.11 or newer. The runtime uses only the standard library; tests need `pytest`.
+Run commands from the repo root. Full setup: `docs/development.md`.
 
 ## Smoke Test
 
@@ -127,6 +135,15 @@ Shadow score preview:
 ```bash
 python3 -m pytest tests
 ```
+
+On a clean checkout with Python 3.11+ this reports `115 passed, 3 skipped`. The skipped tests need local, gitignored captures under `manifests/`.
+
+## More Docs
+
+- Architecture and module map: `docs/architecture.md`
+- Local development: `docs/development.md`
+- Contributing: `CONTRIBUTING.md`
+- Agent guidance: `CLAUDE.md`
 
 ## Boundary
 
