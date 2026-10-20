@@ -1,4 +1,3 @@
-from datetime import date
 
 from gino_gate.paper_forward import PaperPosition
 from gino_gate.stop_enforcement import (

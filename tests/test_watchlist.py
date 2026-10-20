@@ -55,6 +55,7 @@ def test_ledger_records_with_price_pending(tmp_path):
     ledger = WatchlistLedger(tmp_path / "wl.jsonl")
     items = parse_watchlist(GINO_6_29, use_llm=False)
     recs = ledger.record_watchlist(items)
+    assert len(recs) == len(items)
     assert ledger.count() == len(items)
     rows = ledger.tail()
     assert rows[0]["price_source"] == "pending"
