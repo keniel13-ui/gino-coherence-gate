@@ -65,6 +65,27 @@ Then set:
 export GINO_TELEGRAM_CHAT_ID='123456789'
 ```
 
+Then restrict the chat bot to that chat. Telegram bots can be found and messaged by
+anyone who knows the username, so without this anyone could query captured rows:
+
+```bash
+export GINO_TELEGRAM_ALLOWED_CHAT_IDS='123456789'
+```
+
+Restart `scripts/gino_telegram_bot.py` after setting it. Messages from other chats are
+ignored and noted on stderr. Multiple IDs are comma-separated.
+
+## 4b. Receipt Signing Key
+
+Receipts from `gino_gate.server` and `scripts/live_read_once.py` are HMAC-signed with
+`GINO_GATE_LOG_KEY`. If it is unset they fall back to a dev key that is committed to
+this repo (a warning is printed), and those receipts can be forged by anyone. Set a
+local secret before any run whose receipts matter, and verify a chain with:
+
+```bash
+python3 -m gino_gate.server --receipts var/live_read_receipts.jsonl --verify-receipts
+```
+
 ## 5. Discord Monitor
 
 Required:

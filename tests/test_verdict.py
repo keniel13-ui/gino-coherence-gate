@@ -65,3 +65,55 @@ def test_live_requires_ticket_at_threshold():
     )
     assert verdict.verdict == "REQUIRE_TICKET"
     assert verdict.rule_fired == "ticket_required"
+
+
+def _live(args, recompute=None, **kwargs):
+    return decide(
+        {"tool": "place_equity_order", "args": {"symbol": "AAPL", **args}},
+        _policy("gated_live"),
+        recompute if recompute is not None else {"rolling_window_after_usd": 10, "position_after_usd": 10},
+        now_et=datetime(2026, 6, 18, 10, 0),
+        **kwargs,
+    )
+
+
+def test_nan_notional_is_refused_not_allowed():
+    # Regression: NaN compares False against every cap, so it used to reach policy_pass.
+    verdict = _live({"notional_usd": float("nan")})
+    assert verdict.verdict == "REFUSE"
+    assert verdict.rule_fired == "invalid_numeric_input"
+
+
+def test_infinite_and_unparseable_notional_are_refused():
+    assert _live({"notional_usd": float("inf")}).rule_fired == "invalid_numeric_input"
+    assert _live({"notional_usd": "abc"}).rule_fired == "invalid_numeric_input"
+
+
+def test_negative_quantity_cannot_shrink_notional_under_cap():
+    # Regression: qty=-1000 at $500 produced a negative notional that passed every cap.
+    verdict = _live({"qty": -1000, "price_usd": 500})
+    assert verdict.verdict == "REFUSE"
+    assert verdict.rule_fired == "invalid_numeric_input"
+
+
+def test_nan_recompute_values_are_refused():
+    for key in ("position_after_usd", "rolling_window_after_usd", "daily_pnl_usd"):
+        verdict = _live({"notional_usd": 10}, {key: float("nan")})
+        assert verdict.rule_fired == "invalid_numeric_input", key
+
+
+def test_negative_daily_pnl_still_reaches_loss_limit():
+    verdict = _live({"notional_usd": 10}, {"daily_pnl_usd": -30})
+    assert verdict.rule_fired == "daily_loss_limit"
+
+
+def test_valid_small_order_still_passes():
+    verdict = _live({"notional_usd": 10})
+    assert verdict.verdict == "ALLOW"
+    assert verdict.rule_fired == "policy_pass"
+
+
+def test_nan_input_age_is_treated_as_stale():
+    verdict = decide({"tool": "get_accounts", "args": {}}, _policy(), input_ages_sec=[float("nan")])
+    assert verdict.verdict == "REFUSE"
+    assert verdict.rule_fired == "stale_input"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
@@ -55,7 +56,7 @@ def _split_option_key(position: PaperPosition) -> tuple[str, float, str] | None:
 def yahoo_chart_url(symbol: str, expiry: date) -> str:
     start = int(datetime(expiry.year, expiry.month, expiry.day, tzinfo=UTC).timestamp()) - 9 * 86400
     end = int(datetime(expiry.year, expiry.month, expiry.day, tzinfo=UTC).timestamp()) + 3 * 86400
-    return f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?period1={start}&period2={end}&interval=1d"
+    return f"https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol, safe='')}?period1={start}&period2={end}&interval=1d"
 
 
 def fetch_yahoo_underlying_close(symbol: str, expiry: date) -> UnderlyingClose:

@@ -195,6 +195,12 @@ class GinoChatAgent:
 
     def _read_row(self, row_id: str, *, ticker: str = "") -> dict[str, str]:
         matches: list[dict[str, str]] = []
+        if not self.source_csv.is_file():
+            # Surface as ValueError so the Telegram/Discord loops answer the user instead
+            # of treating a missing local CSV like a network outage.
+            raise ValueError(
+                f"captured call log not found at {self.source_csv}; pass --source-csv to point at it"
+            )
         with self.source_csv.open("r", newline="", encoding="utf-8") as fh:
             for row in csv.DictReader(fh):
                 if str(row.get("#", "")).strip() != row_id:
